@@ -1,0 +1,1 @@
+# Legitimize Trigger directory as a module
