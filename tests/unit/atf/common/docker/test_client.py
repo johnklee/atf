@@ -208,7 +208,19 @@ class DockerAgentTest(unittest.TestCase):
         time.sleep(3)
 
         # 2) Test container APIs
+        r'''
+         * Serving Flask app "index" (lazy loading)
+         * Environment: production
+         WARNING: This is a development server. Do not use it in a prod         n deployment.
+         Use a production WSGI server instead.
+         * Debug mode: off
+         * Running on http://0.0.0.0:5000/ (Press CTRL+C to quit)
+        '''
         self.assertTrue(cnt_test.grep_logs('Running on http://0.0.0.0:5000/'), 'Unexpected logs:\n{}\n'.format(cnt_test.logs))
+        self.assertTrue(hasattr(cnt_test, 'last_matched_line_num') and cnt_test.last_matched_line_num == 5)
+        self.assertFalse(cnt_test.grep_logs('Serving Flask app'), 'grep should start from last success line!')
+        cnt_test.last_matched_line_num = 0
+        self.assertTrue(cnt_test.grep_logs('Serving Flask app'), 'Reset should let grep to start from first line!')
 
         #   2.1) Test API:exe_command
         rc, logs = cnt_test.exe_command('ls -hl', workdir='/app')

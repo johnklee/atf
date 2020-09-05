@@ -40,13 +40,41 @@ class LogOutput(object):
     def __repr__(self):
         return self.__str__()
 
-    def grep(self, ptn, use_match=False, quiet=False):
+    def grep(self, ptn, use_match=False, quiet=False, start_line_num=-1):
+        '''grep the log message
+
+        Parameters
+        ----------
+        ptn : string
+            pattern to match line(s) from log
+
+        use_match : bool
+            True to use re.match to match line; otherwise re.search will be used
+
+        quiet : bool
+            True to return bool as matching result (True: Matched; False: Miss)
+            False to return list of all matched line
+
+        start_line_num : int
+            Number of line to start grepping. (-1 or 0 means to grep from first line)
+
+        Returns
+        -------
+        if `quiet` is True:
+            bool as grepping result (True: match; False: miss)
+        else:
+            list of matched line(s)
+        '''
         lines = str(self).split('\n')
+
         matched = []
         grep_method = re.match if use_match else re.search
-        for line in lines:            
+        for line_num, line in enumerate(lines):
+            if start_line_num > 0 and line_num < start_line_num:
+                continue
+
             if grep_method(ptn, line):
-                matched.append(line)
+                matched.append((line_num, line))
 
         if quiet:
             return len(matched) > 0
@@ -63,6 +91,8 @@ class ContainerWP:
         self.da = da
         for attr in ['id', 'labels', 'image', 'name', 'short_id']:
             setattr(self, attr, getattr(self.c, attr))
+
+        self.last_matched_line_num = 0
 
     @property
     def attrs(self):
@@ -112,21 +142,44 @@ class ContainerWP:
         return log_output
 
     def grep_logs(self, ptn, use_match=False, quiet=True, retry=5, wait=1):
-        r'''
-        Grep logs collected from container
+        r'''Grep logs collected from container
 
-        @param ptn(str): Pattern to search in logs
-        @param use_match(bool): 
+        Parameters
+        ----------
+        ptn : str
+            Pattern to search in logs
+
+        use_match : bool
+            True to use re.match to match line; otherwise re.search will be used
+            
+        quiet : bool
+            True to return bool as matching result (True: Matched; False: Miss)
+            False to return list of all matched line
+
+        retry : int
+            How many times to retry grepping
+            
+        wait : int
+            How many seconds to wait for next round in searching when miss. 
         '''
         retry_count = 0
-        while True:
-            grep_rst = self.logs.grep(ptn, use_match, quiet)
-            if grep_rst:
+        def _post_poc_grep_rst(grep_rst):
+            if len(grep_rst) > 0:
+                self.last_matched_line_num = grep_rst[0][0]
+
+            if quiet:
+                return len(grep_rst) > 0
+            else:
                 return grep_rst
+
+        while True:
+            grep_rst = self.logs.grep(ptn, use_match, quiet=False, start_line_num=self.last_matched_line_num)
+            if grep_rst:
+                return _post_poc_grep_rst(grep_rst)
 
             retry_count += 1
             if retry_count >= retry:
-                return grep_rst
+                return _post_poc_grep_rst(grep_rst)
 
             time.sleep(wait)
 
