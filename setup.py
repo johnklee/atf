@@ -24,8 +24,8 @@ test_requirements = [
 ]
 
 setup(
-    name='atf',
-    version='0.0.1',
+    name='atf-docker',
+    version='0.0.2',
     author='johnklee',
     author_email='kueiching.a.lee@rakuten.com',
     description='ATF for docker',
