@@ -27,6 +27,7 @@ class DockerAgentTest(unittest.TestCase):
         da = DockerAgent(auto_clean_cnt=False)
         self.test_dir = tempfile.mkdtemp()
         self.test_img_name = 'atf_docker/test:latest'
+        self.test_img_name2 = 'johnklee/atf_docker_test2:latest'
         self.hello_img_name = 'hello-world'
         self.test_build_path = os.path.join(CUR_TESTDATA_DIR, 'docker/images/test/')
         self.test_dockerfile_path = os.path.join(self.test_build_path, 'Dockerfile')
@@ -219,7 +220,7 @@ class DockerAgentTest(unittest.TestCase):
         self.assertTrue(cnt_test.grep_logs('Running on http://0.0.0.0:5000/'), 'Unexpected logs:\n{}\n'.format(cnt_test.logs))
         self.assertTrue(hasattr(cnt_test, 'last_matched_line_num') and cnt_test.last_matched_line_num == 5)
         self.assertFalse(cnt_test.grep_logs('Serving Flask app'), 'grep should start from last success line!')
-        cnt_test.last_matched_line_num = 0
+        cnt_test.last_matched_line_num = -1
         self.assertTrue(cnt_test.grep_logs('Serving Flask app'), 'Reset should let grep to start from first line!')
 
         #   2.1) Test API:exe_command
@@ -246,6 +247,26 @@ class DockerAgentTest(unittest.TestCase):
 
         self.assertTrue(mark in content_of_test_out_txt,
                         'Unexpected content of out file:\n{}\n'.format(content_of_test_out_txt))
+
+    @pytest.mark.container
+    def test_feat_continuous_log_grepping(self):
+        # 1) Start container
+        da = DockerAgent()
+        cnt_test = da.run(self.test_img_name2, name='atf_test')
+        self.assertTrue(isinstance(cnt_test, ContainerWP), 'Returned container object should be class ContainerWP')
+        self.assertTrue(cnt_test.status == 'running', 'Unexpected container status={}'.format(cnt_test.status))
+        time.sleep(3)
+
+        # 2) Grep logs
+        # e.g.: [(0, 'Hi 0'), (1, 'Hi 1'), (2, 'Hi 2'), (3, 'Hi 3')]
+        logs = cnt_test.grep_logs("Hi \d", quiet=False)
+        self.assertTrue(len(logs) > 0, 'Unexpected empty logs')
+        self.assertTrue(logs[0][0] == 0, 'Unexpected line number')
+        self.assertTrue(logs[0][1] == 'Hi 0', 'Unexpected line number')
+        time.sleep(2)
+        # e.g.: [(4, 'Hi 4'), (5, 'Hi 5')]
+        next_logs = cnt_test.grep_logs("Hi \d", quiet=False)
+        self.assertTrue(next_logs[0][0] == logs[-1][0] + 1, f'Unexpected next logs={next_logs}')
 
     @pytest.mark.network
     def test_network_api(self):

@@ -12,18 +12,18 @@ This repository is used for ATF to test docker.
    * [Copy in/out file](#usage_copy)
 6. [Reference](#ref)
 
-# Goal <a name='linkGoal'></a>
+## Goal <a name='linkGoal'></a>
 This repo actually is a wrapper on [**Docker SDK for Python**](https://docker-py.readthedocs.io/en/stable/) but provide more flexibly and powerful APIs for QA to write test cases in manipulating docker container/image. The goal of this repo is aimed to be the core/supportive package in testing docker and adopted in any ATF framework. 
 
 
-# To-Do Items <a name='linkToDo'></a>
+## To-Do Items <a name='linkToDo'></a>
 So far I will of below features to work on for early implementation:
 * Support SSH connection or `docker exec ... bash` to obtain the console of container
 * ~~Support log grep function for easily information extraction~~
 * ~~Support pdb functionality (breakpoint)~~
 
 
-# Required Packages <a name='linkToRequiredPack'></a>
+## Required Packages <a name='linkToRequiredPack'></a>
 * coloredlogs (pip install coloredlogs)
 * docker (pip install docker)
 * pexpect (pip install pexpect)
@@ -32,7 +32,7 @@ So far I will of below features to work on for early implementation:
 For more, please refer to ['requirements.txt'](https://github.com/jkclee/atf_docker/blob/master/requirements.txt)
 
 
-# ATF Environment Variables <a name='atfEV'></a>
+## ATF Environment Variables <a name='atfEV'></a>
 * ATF_BREAKPOINT: 1 to enable breakpoint
 * ATF_LOG_LEVEL: ATF log level. Similar to logging. Ref to [logging doc](https://docs.python.org/2/library/logging.html#logging-levels).
   * RITICAL - 50
@@ -42,10 +42,10 @@ For more, please refer to ['requirements.txt'](https://github.com/jkclee/atf_doc
   * DEBUG - 10
   * NOTSET - 0
 
-# Demonstration of usage <a name='usage'/>
+## Demonstration of usage <a name='usage'/>
 Here will show a few usages on how to automate docker operations by applying this package.
 
-## Build image <a name='usage_build'/>
+### Build image <a name='usage_build'/>
 For API to build image from aspect of [**Docker SDK for Python**](https://docker-py.readthedocs.io/en/stable/), you can refer to below documents:
 * [Images - build](https://docker-py.readthedocs.io/en/stable/images.html#docker.models.images.ImageCollection.build)
 * [Low-level API - Building images](https://docker-py.readthedocs.io/en/stable/api.html#module-docker.api.build)
@@ -77,7 +77,7 @@ datetime.datetime(2019, 10, 28, 11, 37, 13)
 ```
 Then you can double confirmed with command `docker images | grep "atf_docker/demo` from terminal.
 
-## Launch container <a name='usage_cont'/>
+### Launch container <a name='usage_cont'/>
 For operations on container from aspect of [**Docker SDK for Python**](https://docker-py.readthedocs.io/en/stable/), you can refer to below documents:
 * [Containers: Run and manage containers on the server.](https://docker-py.readthedocs.io/en/stable/containers.html)
 * [Low-level API - Containers](https://docker-py.readthedocs.io/en/stable/api.html#module-docker.api.container) 
@@ -135,7 +135,7 @@ Stop the container before attempting removal or force remove")
 []
 ```
 
-## Copy in/out file <a name='usage_copy'/>
+### Copy in/out file <a name='usage_copy'/>
 You can easily copy file in/out from container by below sample user case:
 ```python
 // Launch testing container
@@ -171,5 +171,5 @@ True
 'test file copy in/out\nabcdefg\n'
 ```
 
-# Reference <a name='ref'/>
+## Reference <a name='ref'/>
 * [Python Debugging With Pdb](https://realpython.com/python-debugging-pdb/)
