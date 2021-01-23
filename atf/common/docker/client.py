@@ -3,13 +3,10 @@ import re
 import sys
 import time
 import types
-import errno
-import unittest
-import pexpect
 import docker
 import logging
 from atf.common.utils.dspawn import dspawn
-from atf.framework.FrameworkBase import *
+from atf.framework.FrameworkBase import *  # noqa
 
 
 ################################
@@ -17,7 +14,6 @@ from atf.framework.FrameworkBase import *
 ################################
 MODU_PATH = os.path.dirname(__file__) if os.path.dirname(__file__) else './'
 ''' Path of current module '''
-
 
 
 ################################
@@ -40,13 +36,41 @@ class LogOutput(object):
     def __repr__(self):
         return self.__str__()
 
-    def grep(self, ptn, use_match=False, quiet=False):
+    def grep(self, ptn, use_match=False, quiet=False, start_line_num=-1):
+        '''grep the log message
+
+        Parameters
+        ----------
+        ptn : string
+            pattern to match line(s) from log
+
+        use_match : bool
+            True to use re.match to match line; otherwise re.search will be used
+
+        quiet : bool
+            True to return bool as matching result (True: Matched; False: Miss)
+            False to return list of all matched line
+
+        start_line_num : int
+            Number of line to start grepping. (-1 or 0 means to grep from first line)
+
+        Returns
+        -------
+        if `quiet` is True:
+            bool as grepping result (True: match; False: miss)
+        else:
+            list of matched line(s)
+        '''
         lines = str(self).split('\n')
+
         matched = []
         grep_method = re.match if use_match else re.search
-        for line in lines:            
+        for line_num, line in enumerate(lines):
+            if start_line_num > 0 and line_num < start_line_num:
+                continue
+
             if grep_method(ptn, line):
-                matched.append(line)
+                matched.append((line_num, line.strip()))
 
         if quiet:
             return len(matched) > 0
@@ -63,6 +87,8 @@ class ContainerWP:
         self.da = da
         for attr in ['id', 'labels', 'image', 'name', 'short_id']:
             setattr(self, attr, getattr(self.c, attr))
+
+        self.last_matched_line_num = -1
 
     @property
     def attrs(self):
@@ -84,7 +110,6 @@ class ContainerWP:
 
     @property
     def gateway(self):
-        #return self.attrs['NetworkSettings']['Gateway']
         attrs = self.da.apiClient.inspect_container(self.id)
         gw_setting = {}
         for net_name, net_setting in attrs['NetworkSettings']['Networks'].items():
@@ -112,21 +137,45 @@ class ContainerWP:
         return log_output
 
     def grep_logs(self, ptn, use_match=False, quiet=True, retry=5, wait=1):
-        r'''
-        Grep logs collected from container
+        r'''Grep logs collected from container
 
-        @param ptn(str): Pattern to search in logs
-        @param use_match(bool): 
+        Parameters
+        ----------
+        ptn : str
+            Pattern to search in logs
+
+        use_match : bool
+            True to use re.match to match line; otherwise re.search will be used
+
+        quiet : bool
+            True to return bool as matching result (True: Matched; False: Miss)
+            False to return list of all matched line
+
+        retry : int
+            How many times to retry grepping
+
+        wait : int
+            How many seconds to wait for next round in searching when miss.
         '''
         retry_count = 0
-        while True:
-            grep_rst = self.logs.grep(ptn, use_match, quiet)
-            if grep_rst:
+
+        def _post_poc_grep_rst(grep_rst):
+            if len(grep_rst) > 0:
+                self.last_matched_line_num = grep_rst[-1][0]
+
+            if quiet:
+                return len(grep_rst) > 0
+            else:
                 return grep_rst
+
+        while True:
+            grep_rst = self.logs.grep(ptn, use_match, quiet=False, start_line_num=self.last_matched_line_num + 1)
+            if grep_rst:
+                return _post_poc_grep_rst(grep_rst)
 
             retry_count += 1
             if retry_count >= retry:
-                return grep_rst
+                return _post_poc_grep_rst(grep_rst)
 
             time.sleep(wait)
 
@@ -175,9 +224,9 @@ class ContainerWP:
     def restart(self, timeout=10):
         r'''
         Restart a container. Similar to the 'docker restart' command.
-        
+
         @parm timeout (int):
-            Number of seconds to try to stop for before killing the container. 
+            Number of seconds to try to stop for before killing the container.
             Once killed it will then be restarted. Default is 10 seconds.
         '''
         self.da.apiClient.restart(container=self.id, timeout=timeout)
@@ -188,7 +237,7 @@ class DockerAgent(FrameworkBase):
     # Class error definitions
     ###
     (CMD_TIMEOUT) = FrameworkError.ERR_DOCKER
-    (API_ERROR) = FrameworkError.ERR_DOCKER + 1 
+    (API_ERROR) = FrameworkError.ERR_DOCKER + 1
 
     ###
     # Common Commands
@@ -218,8 +267,8 @@ class DockerAgent(FrameworkBase):
     @property
     def networks(self):
         r'''
-        Create and manage networks on the server. 
-        
+        Create and manage networks on the server.
+
         @see:
             https://docker-py.readthedocs.io/en/stable/networks.html#
             https://docs.docker.com/engine/userguide/networking/
@@ -258,18 +307,18 @@ class DockerAgent(FrameworkBase):
                 for k, v in msg.items():
                     out_msg += v
 
-        return LogOutput(out_msg) 
-            
+        return LogOutput(out_msg)
+
     def build(self, **kwargs):
         r'''
-        Build an image and return it. Similar to the 'docker build' command. 
+        Build an image and return it. Similar to the 'docker build' command.
         Either path or fileobj must be set.
 
         @param path (str):
             Path to the directory containing the Dockerfile
 
         @param fileobj:
-            A file object to use as the Dockerfile. (Or a file-like object) 
+            A file object to use as the Dockerfile. (Or a file-like object)
 
         @param tag (str):
             A tag to add to the final image
@@ -281,11 +330,11 @@ class DockerAgent(FrameworkBase):
             Don't use the cache when set to True
 
         @param rm (bool):
-            Remove intermediate containers. The 'docker build' command now defaults to --rm=true, 
+            Remove intermediate containers. The 'docker build' command now defaults to --rm=true,
             but we have kept the old default of False to preserve backward compatibility
 
         @param stream (bool):
-            Deprecated for API version > 1.8 (always True). 
+            Deprecated for API version > 1.8 (always True).
             Return a blocking generator you can iterate over to retrieve build output as it happens
 
         @param timeout (int):
@@ -338,8 +387,8 @@ class DockerAgent(FrameworkBase):
         if 'rm' not in kwargs:
             kwargs['rm'] = True
 
-        gen =  self.apiClient.build(**kwargs)
-        return self._wgen(gen) 
+        gen = self.apiClient.build(**kwargs)
+        return self._wgen(gen)
 
     def containers(self, all=False, quiet=0, limit=-1, filters=None, name=None):
         r'''
@@ -347,7 +396,7 @@ class DockerAgent(FrameworkBase):
 
         @param all(bool):
             True to show all containers. Only running containers are shown by default
-        
+
         @param quiet(int):
             quiet=0: Show all information
             quiet=1: Only display numeric Ids
@@ -373,7 +422,7 @@ class DockerAgent(FrameworkBase):
             A comprehensive list can be found in the documentation for docker ps.
 
         @param name(re|lambda):
-            Name of container(s) to filter out 
+            Name of container(s) to filter out
 
         @return
             List of container
@@ -381,7 +430,7 @@ class DockerAgent(FrameworkBase):
         cns = self.client.containers.list(limit=limit, filters=filters, all=all)
 
         if name:
-            if type(name) is types.FunctionType:
+            if isinstance(name, types.FunctionType):
                 # Lambda object
                 cns = [cn for cn in cns if name(cn.name)]
             elif isinstance(name, type(re.compile('.'))):
@@ -408,26 +457,26 @@ class DockerAgent(FrameworkBase):
         @see:
             https://docs.docker.com/engine/reference/commandline/cp/
 
-        @param from_path (str): 
+        @param from_path (str):
             File/Folder path inside container
         @param to_path (str):
             Destination path from host of copy action
-        @param container_id (str): 
+        @param container_id (str):
             The id of target container to copy into.
-        
-        @return: 
+
+        @return:
             (str): The contents of the file as a string
         '''
         self.cons.sendline("%s %s:%s %s" % (DockerAgent.CMD_DOCKER_CP, container_id, from_path, to_path))
         expect_resp = [
-                       'must specify at least one container source',
-                       'No such container',
-                       'no such file or directory',
-                       self.cons.PROMPT
-                      ]
+            'must specify at least one container source',
+            'No such container',
+            'no such file or directory',
+            self.cons.PROMPT
+        ]
         rt = self.cons.expect(expect_resp)
         if depressExcept:
-            if rt+1 < len(expect_resp):
+            if rt + 1 < len(expect_resp):
                 return False
             else:
                 return True
@@ -444,30 +493,31 @@ class DockerAgent(FrameworkBase):
     def copy2cont(self, container_id, from_path, to_path, depressExcept=False):
         r'''
         Identical to the "docker cp" command. Copy files/folders from local to the container.
-        
+
         @see:
             https://docs.docker.com/engine/reference/commandline/cp/
-        
-        @param from_path (str): 
+
+        @param from_path (str):
             File/Folder path from local
         @param to_path (str):
             Destination path inside container of copy action
-        @param container_id (str): 
+        @param container_id (str):
             The id of target container to copy into.
-        
-        @return: 
+
+        @return:
             (str): The contents of the file as a string
         '''
         self.cons.sendline("%s %s %s:%s" % (DockerAgent.CMD_DOCKER_CP, from_path, container_id, to_path))
         expect_resp = [
-                       'must specify at least one container source',
-                       'No such container',
-                       'no such file or directory',
-                       self.cons.PROMPT
-                      ]
-        rt = self.cons.expect(expect_resp) 
+            'must specify at least one container source',
+            'No such container',
+            'no such file or directory',
+            self.cons.PROMPT
+        ]
+
+        rt = self.cons.expect(expect_resp)
         if depressExcept:
-            if rt+1 < len(expect_resp):
+            if rt + 1 < len(expect_resp):
                 return False
             else:
                 return True
@@ -493,7 +543,7 @@ class DockerAgent(FrameworkBase):
         @return
             Container id or None if the input container name doesn't exist.
         '''
-        cnts = self.containers(filters={'name':container_name}, all=all)
+        cnts = self.containers(filters={'name': container_name}, all=all)
         if len(cnts) == 1:
             return cnts[0].id
         else:
@@ -504,7 +554,7 @@ class DockerAgent(FrameworkBase):
                          working_dir=None, domainname=None, host_config=None, mac_address=None, labels=None, stop_signal=None,
                          networking_config=None, healthcheck=None, stop_timeout=None, runtime=None, use_config_proxy=True):
         r'''
-        Creates a container. Parameters are similar to those for the 
+        Creates a container. Parameters are similar to those for the
         docker run command except it doesn't support the attach options (-a).
 
         @param image (str):
@@ -522,15 +572,15 @@ class DockerAgent(FrameworkBase):
         @param tty (bool):
             Allocate a pseudo-TTY
         @param mem_limit (float or str):
-            Memory limit. Accepts float values (which represent the memory 
-            limit of the created container in bytes) or a string with a 
-            units identification char (100000b, 1000k, 128m, 1g). If a 
-            string is specified without a units character, bytes are 
+            Memory limit. Accepts float values (which represent the memory
+            limit of the created container in bytes) or a string with a
+            units identification char (100000b, 1000k, 128m, 1g). If a
+            string is specified without a units character, bytes are
             assumed as an intended unit.
         @param ports (list of ints):
             A list of port numbers opened inside container
         @param environment (dict or list):
-            A dictionary or a list of strings in the following 
+            A dictionary or a list of strings in the following
             format ["PASSWORD=xxx"] or {"PASSWORD": "xxx"}.
         @param volumes (str or list):
             List of paths inside the container to use as volumes.
@@ -549,7 +599,7 @@ class DockerAgent(FrameworkBase):
         @param mac_address (str):
             The Mac Address to assign the container
         @param labels (dict or list):
-            A dictionary of name-value labels (e.g. {"label1": "value1", "label2": "value2"}) 
+            A dictionary of name-value labels (e.g. {"label1": "value1", "label2": "value2"})
             or a list of names of labels to set with empty values (e.g. ["label1", "label2"])
         @param stop_signal (str):
             The stop signal to use to stop the container (e.g. SIGINT).
@@ -562,17 +612,18 @@ class DockerAgent(FrameworkBase):
         @param healthcheck (dict):
             Specify a test to perform to check that the container is healthy.
         @param use_config_proxy (bool):
-            If True, and if the docker client configuration file (~/.docker/config.json by default) contains a proxy configuration, 
+            If True, and if the docker client configuration file (~/.docker/config.json by default) contains a proxy configuration,
             the corresponding environment variables will be set in the container being created.
-   
+
         @return:
             A dictionary with an image 'Id' key and a 'Warnings' key.
- 
+
         @see
             https://docker-py.readthedocs.io/en/stable/api.html#docker.api.container.ContainerApiMixin.create_container
         '''
         if name is None:
             name = 'atf_' + str(int(time.time()))
+
         # e.g. {u'Id': u'57974c7820aa1e7da661930064c56032a7788f748d101831929a0ad6df615407', u'Warnings': None}
         if not image:
             raise (FrameworkError(DockerAgent.API_ERROR, 'Illegal image name=\'{}\''.format(image)))
@@ -582,17 +633,16 @@ class DockerAgent(FrameworkBase):
 
         try:
             return self.apiClient.create_container(image=image, command=command, hostname=hostname, user=user, detach=detach,
-                                                   stdin_open=stdin_open, tty=tty, ports=ports, environment=environment, volumes=volumes,
-                                                   network_disabled=network_disabled, name=name, entrypoint=entrypoint, 
-                                                   working_dir=working_dir, domainname=domainname, host_config=host_config,
-                                                   mac_address=mac_address, labels=labels, stop_signal=stop_signal,
-                                                   networking_config=networking_config, healthcheck=healthcheck,
-                                                   stop_timeout=stop_timeout, runtime=runtime)
+                                                   stdin_open=stdin_open, tty=tty, ports=ports, environment=environment,
+                                                   volumes=volumes, network_disabled=network_disabled, name=name,
+                                                   entrypoint=entrypoint, working_dir=working_dir, domainname=domainname,
+                                                   host_config=host_config, mac_address=mac_address, labels=labels,
+                                                   stop_signal=stop_signal, networking_config=networking_config,
+                                                   healthcheck=healthcheck, stop_timeout=stop_timeout, runtime=runtime)
         except docker.errors.APIError as err:
             raise (FrameworkError(DockerAgent.API_ERROR, 'Fail in creating container: {}'.format(str(err))))
         except:
             raise (FrameworkError(DockerAgent.API_ERROR, 'Unexpected error: {}'.format(sys.exc_info()[0])))
-
 
     def images(self, name=None, quiet=0, all=False, filters=None):
         r'''
@@ -603,13 +653,13 @@ class DockerAgent(FrameworkBase):
         @param quiet (int):
             0. Return the complete list
             1. Only return numeric IDs as a list.
-            2. Only return name(s) as a list. 
+            2. Only return name(s) as a list.
             3. Only return tuple of (id, name list)
         @param all (bool):
             Show intermediate image layers. By default, these are filtered out.
         @param filters (dict):
-            Filters to be processed on the image list. Available filters: 
-                - dangling (bool) 
+            Filters to be processed on the image list. Available filters:
+                - dangling (bool)
                 - label (str): format either key or key=value
         @return:
             A list if quiet=True, otherwise a dict.
@@ -620,15 +670,15 @@ class DockerAgent(FrameworkBase):
         # Querying
         if name is None or isinstance(name, str):
             rt_list = self.apiClient.images(name=name, quiet=False, all=all, filters=filters)
-        elif type(name) is types.FunctionType:
+        elif isinstance(name, types.FunctionType):
             rt_list = self.apiClient.images(quiet=False, all=all, filters=filters)
             tp_list = []
             for img in rt_list:
                 if img['RepoTags']:
-                  for n in img['RepoTags']:
-                    if name(n):
-                      tp_list.append(img)
-                      break
+                    for n in img['RepoTags']:
+                        if name(n):
+                            tp_list.append(img)
+                            break
 
             rt_list = tp_list
         else:
@@ -662,7 +712,7 @@ class DockerAgent(FrameworkBase):
             return image_name['Id']
 
         img_list = self.images(image_name, quiet=1)
-        if not len(img_list)==1:
+        if not len(img_list) == 1:
             raise (FrameworkError(DockerAgent.API_ERROR, 'The image name=\'{}\' does not exist!'.format(image_name)))
 
         return img_list[0]
@@ -674,18 +724,18 @@ class DockerAgent(FrameworkBase):
         @param container (str):
             The id of container to kill
         @param signal (str or int):
-            The signal to send. Defaults to SIGKILL    
+            The signal to send. Defaults to SIGKILL
 
         @see:
-            https://docker-py.readthedocs.io/en/stable/api.html#docker.api.container.ContainerApiMixin.kill 
+            https://docker-py.readthedocs.io/en/stable/api.html#docker.api.container.ContainerApiMixin.kill
         '''
         self.apiClient.kill(container=container, signal=signal)
 
     def pause(self, container):
         r'''
         Pauses all processes within a container.
-        
-        @param container (str): 
+
+        @param container (str):
             The container to pause
 
         @see:
@@ -698,11 +748,11 @@ class DockerAgent(FrameworkBase):
         Delete stopped containers
 
         @param filters (dict):
-            Filters to process on the prune list.    
+            Filters to process on the prune list.
 
         @return
             A dict containing a list of deleted container IDs and
-            the amount of disk space reclaimed in bytes. 
+            the amount of disk space reclaimed in bytes.
 
         @see:
             https://docker-py.readthedocs.io/en/stable/api.html#docker.api.container.ContainerApiMixin.prune_containers
@@ -712,7 +762,7 @@ class DockerAgent(FrameworkBase):
     def pull(self, repository, tag=None, stream=False, auth_config=None, decode=False, platform=None):
         r'''
         Pulls an image. Similar to the "docker pull" command.
-        
+
         @param repository (str):
             The repository to pull
         @param tag (str):
@@ -720,7 +770,7 @@ class DockerAgent(FrameworkBase):
         @param stream (bool):
             Stream the output as a generator
         @param auth_config (dict):
-            Override the credentials that login() has set for this request. 
+            Override the credentials that login() has set for this request.
             auth_config should contain the 'username' and 'password' keys to be valid.
         @param decode (bool):
             Decode the JSON data from the server into dicts. Only applies with stream=True
@@ -758,18 +808,17 @@ class DockerAgent(FrameworkBase):
         '''
         if isinstance(container, str):
             return self.apiClient.remove_container(container=container, v=v, link=link, force=force)
-        elif isinstance(container, type(re.compile('.'))) or type(container) is types.FunctionType:
+        elif isinstance(container, type(re.compile('.'))) or isinstance(container, types.FunctionType):
             # re/lambda object to match name of container(s)
             rcnt = 0
             for cnt_id in self.containers(quiet=1, all=True, name=container):
                 self.logger.debug('Remove container with id={}...'.format(cnt_id))
                 self.apiClient.remove_container(container=cnt_id, v=v, link=link, force=force)
                 rcnt = rcnt + 1
-            return rcnt           
+            return rcnt
         elif isinstance(container, dict):
             return self.apiClient.remove_container(container=container['Id'], v=v, link=link, force=force)
-        elif isinstance(container, docker.models.containers.Container) or \
-             isinstance(container, ContainerWP):
+        elif isinstance(container, docker.models.containers.Container) or isinstance(container, ContainerWP):
             return self.apiClient.remove_container(container=container.id, v=v, link=link, force=force)
         else:
             # Unknown object
@@ -801,7 +850,7 @@ class DockerAgent(FrameworkBase):
             if ignoreINF:
                 pass
             else:
-                raise (FrameworkError(DockerAgent.API_ERROR, 'Image Not Found ({})'.format(image))) 
+                raise (FrameworkError(DockerAgent.API_ERROR, 'Image Not Found ({})'.format(image)))
         except:
             raise (FrameworkError(DockerAgent.API_ERROR, 'Unexpected error: {}'.format(sys.exc_info()[0])))
 
@@ -819,11 +868,11 @@ class DockerAgent(FrameworkBase):
     def restart(self, container, timeout=10):
         r'''
         Restart a container. Similar to the 'docker restart' command.
-        
+
         @param container (str or dict):
             The container to restart. If a dict, the Id key is used.
         @parm timeout (int):
-            Number of seconds to try to stop for before killing the container. 
+            Number of seconds to try to stop for before killing the container.
             Once killed it will then be restarted. Default is 10 seconds.
         '''
         self.apiClient.restart(container=container, timeout=timeout)
@@ -855,7 +904,7 @@ class DockerAgent(FrameworkBase):
             port_bindings={5000: 1234} will map port 5000 inside container to host port 1234
 
         @return:
-            dict with key 'Id' with value as container id; 
+            dict with key 'Id' with value as container id;
                       key 'Warnings' with value as warning message.
         '''
         if (binds or port_bindings) and host_config is None:
@@ -866,11 +915,11 @@ class DockerAgent(FrameworkBase):
                 chc_kargs['port_bindings'] = port_bindings
                 ports = list(port_bindings.keys())
 
-            host_config=self.apiClient.create_host_config(**chc_kargs)
+            host_config = self.apiClient.create_host_config(**chc_kargs)
 
         cont_dict = self.create_container(image=image, command=command, hostname=hostname, user=user, detach=detach, stdin_open=stdin_open,
                                           tty=tty, ports=ports, environment=environment, volumes=volumes, network_disabled=network_disabled,
-                                          name=name, entrypoint=entrypoint, working_dir=working_dir, domainname=domainname, 
+                                          name=name, entrypoint=entrypoint, working_dir=working_dir, domainname=domainname,
                                           host_config=host_config, mac_address=mac_address, labels=labels, stop_signal=stop_signal,
                                           networking_config=networking_config, healthcheck=healthcheck, stop_timeout=stop_timeout)
 
@@ -933,7 +982,7 @@ class DockerAgent(FrameworkBase):
                                                  scope=scope, ingress=ingress)
 
         self.created_network_ids.add(net_dict['Id'])
-        net_dict['name'] = name 
+        net_dict['name'] = name
         return net_dict
 
     def prune_networks(self, filters=None):
@@ -945,7 +994,7 @@ class DockerAgent(FrameworkBase):
 
         @return (dict):
             A dict containing a list of deleted network names and
-            the amount of disk space reclaimed in bytes. 
+            the amount of disk space reclaimed in bytes.
         '''
         return self.apiClient.prune_networks(filters=filters)
 
@@ -970,7 +1019,7 @@ class DockerAgent(FrameworkBase):
             The network’s id
         '''
         return self.apiClient.remove_network(net_id)
-        
+
     def __del__(self):
         if self.cons is not None:
             self.cons.close(force=True)
@@ -1017,4 +1066,3 @@ class DockerAgent(FrameworkBase):
         if self.cons is not None:
             self.cons.close(force=True)
             self.cons = None
-
