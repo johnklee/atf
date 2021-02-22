@@ -17,7 +17,6 @@ import functools
 import pdb
 import signal
 import time
-import imp
 import bdb
 from time import sleep
 from io import StringIO
