@@ -200,13 +200,11 @@ class CommonTestCase(unittest.TestCase):
         self.logger.setLevel(level=diagLevel)
 
         try:
-            import coloredlogs
             self.logger.propagate = False
-            imp.find_module('coloredlogs')          
             fmt =  "<%(pathname)s:%(lineno)s> %(message)s"
             coloredlogs.install(level=diagLevel, logger=self.logger, fmt=fmt)
         except:
-            self.logger.warn('Please install package coloredlogs to enable colorful output!')
+            self.logger.warn('Please install package coloredlogs to enable colorful log output!')
 
     def breakpoint(self):
         r"""

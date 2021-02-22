@@ -142,13 +142,14 @@ class DockerAgentTest(unittest.TestCase):
     def test_api_run(self):
         # 1) Start container
         da = DockerAgent()
-        cnt_test = da.run(self.test_img_name, name='atf_test')
+        cnt_test = da.run(self.test_img_name, name='atf_test', ports=[5000], port_bindings={5000: 5000})
         self.assertTrue(isinstance(cnt_test, ContainerWP), 'Returned container object should be class ContainerWP')
         self.assertTrue(cnt_test.status == 'running', 'Unexpected container status={}'.format(cnt_test.status))
 
         # 2) Test container service
         time.sleep(3)
         test_url = 'http://{}:5000/'.format(cnt_test.ip['bridge'])
+        # test_host_url = 'http://localhost:5000/'
         print('access url={}'.format(test_url))
         resp = requests.get(test_url)
         self.assertTrue(resp.status_code==200, 'Unexpected status code={} to access test container'.format(resp.status_code))
@@ -259,13 +260,13 @@ class DockerAgentTest(unittest.TestCase):
 
         # 2) Grep logs
         # e.g.: [(0, 'Hi 0'), (1, 'Hi 1'), (2, 'Hi 2'), (3, 'Hi 3')]
-        logs = cnt_test.grep_logs("Hi \d", quiet=False)
+        logs = cnt_test.grep_logs(r"Hi \d", quiet=False)
         self.assertTrue(len(logs) > 0, 'Unexpected empty logs')
         self.assertTrue(logs[0][0] == 0, 'Unexpected line number')
         self.assertTrue(logs[0][1] == 'Hi 0', 'Unexpected line number')
         time.sleep(2)
         # e.g.: [(4, 'Hi 4'), (5, 'Hi 5')]
-        next_logs = cnt_test.grep_logs("Hi \d", quiet=False)
+        next_logs = cnt_test.grep_logs(r"Hi \d", quiet=False)
         self.assertTrue(next_logs[0][0] == logs[-1][0] + 1, f'Unexpected next logs={next_logs}')
 
     @pytest.mark.network

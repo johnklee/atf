@@ -15,5 +15,5 @@ test:
 dist:
 	python3 setup.py sdist
 
-# upload_pypi:
-#	python3 -m twine upload --repository pypi dist/atf-docker-<version>.tar.gz
+upload_pypi:
+	python3 -m twine upload --repository pypi dist/atf-docker-0.0.4.tar.gz
