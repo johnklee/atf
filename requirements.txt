@@ -5,7 +5,7 @@ cffi==1.14.4
 chardet==3.0.4
 colorama==0.4.4
 coloredlogs==10.0
-cryptography==3.3.1
+cryptography==3.3.2
 docker==4.4.3
 docutils==0.16
 flake8==2.5.4
