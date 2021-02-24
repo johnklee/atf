@@ -5,8 +5,14 @@ python:
 
 # command to install dependencies
 install:
-    - make init
+  - make init
+
+services:
+  - docker
+
+before_install:
+  - docker pull johnklee/atf_docker_test2:latest
 
 # command to run tests
 script:
-    - make test
+  - make test
