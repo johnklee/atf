@@ -2,7 +2,11 @@
 
 all: test lint
 
-test:
+init:
+	pip3 install -r requirements.txt
+	pip3 install -r tests/requirements.txt
+
+test: init
 	pip3 install -r requirements.txt
 	pip3 install -r tests/requirements.txt
 	pytest tests/
