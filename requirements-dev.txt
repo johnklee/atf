@@ -19,7 +19,7 @@ pepper8==1.1.1
 pexpect==4.7.0
 pluggy==0.13.1
 ptyprocess==0.6.0
-py==1.8.1
+py==1.10.0
 pyflakes==1.0.0
 pyparsing==2.4.2
 pytest==5.3.5
