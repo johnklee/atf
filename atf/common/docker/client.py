@@ -6,7 +6,7 @@ import types
 import docker
 import logging
 from atf.common.utils.dspawn import dspawn
-from atf.framework.FrameworkBase import *  # noqa
+from atf.framework.FrameworkBase import FrameworkBase, FrameworkError  # noqa
 
 
 ################################
@@ -641,7 +641,7 @@ class DockerAgent(FrameworkBase):
                                                    healthcheck=healthcheck, stop_timeout=stop_timeout, runtime=runtime)
         except docker.errors.APIError as err:
             raise (FrameworkError(DockerAgent.API_ERROR, 'Fail in creating container: {}'.format(str(err))))
-        except:
+        except Exception:
             raise (FrameworkError(DockerAgent.API_ERROR, 'Unexpected error: {}'.format(sys.exc_info()[0])))
 
     def images(self, name=None, quiet=0, all=False, filters=None):
@@ -790,7 +790,7 @@ class DockerAgent(FrameworkBase):
             return self._wgen(gen)
         except docker.errors.ImageNotFound:
             raise (FrameworkError(DockerAgent.API_ERROR, 'Image Not Found ({})'.format(repository)))
-        except:
+        except Exception:
             raise (FrameworkError(DockerAgent.API_ERROR, 'Unexpected error: {}'.format(sys.exc_info()[0])))
 
     def remove_container(self, container, v=False, link=False, force=False):
@@ -851,7 +851,7 @@ class DockerAgent(FrameworkBase):
                 pass
             else:
                 raise (FrameworkError(DockerAgent.API_ERROR, 'Image Not Found ({})'.format(image)))
-        except:
+        except Exception:
             raise (FrameworkError(DockerAgent.API_ERROR, 'Unexpected error: {}'.format(sys.exc_info()[0])))
 
     def rename(self, container, name):
@@ -998,7 +998,7 @@ class DockerAgent(FrameworkBase):
         '''
         return self.apiClient.prune_networks(filters=filters)
 
-    def inspect_network(net_id, verbose=None, scope=None):
+    def inspect_network(self, net_id, verbose=None, scope=None):
         r'''
         Get detailed information about a network.
 
