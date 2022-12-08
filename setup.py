@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 
 # what `purifier` minimally needs to run correctly (runtime)
 requires = [
-    'certifi==2019.9.11',
+    'certifi==2022.12.7',
     'chardet==3.0.4',
     'docker==4.4.3',
     'idna==2.8',
